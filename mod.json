@@ -1,11 +1,16 @@
 {
-	"geode": "2.0.0-beta.21",
-	"gd": "2.204",
-	"version": "v1.0.0",
+	"geode": "5.0.0",
+	"gd": {
+		"win": "2.2081",
+		"android": "2.2081",
+		"mac": "2.2081",
+		"ios": "2.2081"
+	},
+	"version": "v1.1.0",
 	"id": "tpdea.wavetrailglowy",
 	"name": "Wave Trail Glowy",
 	"developer": "Tpdea",
-	"description": "glowy epic wave",
+	"description": "Glowy epic wave trail for Geometry Dash",
 	"settings": {
 		"glowy-enabled": {
 			"name": "Enabled Mod",
@@ -45,11 +50,8 @@
 			}
 		},
 		"title-seccion-p1-custom": {
-			"name": "P1 Custom",
-			"type": "custom",
-			"description": "This P1 Custom.",
-			"scale": 300,
-			"posX": 80
+			"type": "title",
+			"name": "P1 Custom"
 		},
 		"custom-color-trail-p1": {
 			"name": "Custom Color",
@@ -70,7 +72,7 @@
 			"name": "Rainbow Glowy Speed",
 			"type": "float",
 			"default": 1.0,
-			"min": 0,
+			"min": 0.0,
 			"control": {
 				"arrows": true,
 				"slider": false
@@ -85,7 +87,7 @@
 			"name": "Rainbow Pastel Speed",
 			"type": "float",
 			"default": 1.0,
-			"min": 0,
+			"min": 0.0,
 			"control": {
 				"arrows": true,
 				"slider": false
@@ -110,7 +112,7 @@
 			"name": "Fade Color Speed",
 			"type": "float",
 			"default": 1.0,
-			"min": 0,
+			"min": 0.0,
 			"control": {
 				"arrows": true,
 				"slider": false
@@ -122,11 +124,8 @@
 			"default": true
 		},
 		"title-seccion-p2-custom": {
-			"name": "P2 Custom",
-			"type": "custom",
-			"description": "This P2 Custom.",
-			"scale": 300,
-			"posX": 80
+			"type": "title",
+			"name": "P2 Custom"
 		},
 		"custom-color-trail-p2": {
 			"name": "Custom Color",
@@ -147,7 +146,7 @@
 			"name": "Rainbow Glowy Speed",
 			"type": "float",
 			"default": 1.0,
-			"min": 0,
+			"min": 0.0,
 			"control": {
 				"arrows": true,
 				"slider": false
@@ -162,7 +161,7 @@
 			"name": "Rainbow Pastel Glowy Speed",
 			"type": "float",
 			"default": 1.0,
-			"min": 0,
+			"min": 0.0,
 			"control": {
 				"arrows": true,
 				"slider": false
@@ -187,7 +186,7 @@
 			"name": "Fade Color Speed",
 			"type": "float",
 			"default": 1.0,
-			"min": 0,
+			"min": 0.0,
 			"control": {
 				"arrows": true,
 				"slider": false
@@ -198,12 +197,5 @@
 			"type": "bool",
 			"default": true
 		}
-	},
-	"dependencies": [
-			{
-				"id": "geode.node-ids",
-				"version": ">=v1.3.0",
-				"importance": "required"
-			}
-		]
 	}
+}
