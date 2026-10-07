@@ -186,7 +186,7 @@ void WaveTrailGlowy::update(float delta) {
 			resetTrail();
 		}
 		else {
-			bool isDead = m_pPlayer->m_isDead || m_playLayer->m_isDead;
+			bool isDead = m_pPlayer->m_isDead || (m_playLayer->m_player1 && m_playLayer->m_player1->m_isDead);
 			bool trailEmpty = (m_pPlayer->m_waveTrail && m_pPlayer->m_waveTrail->m_pointArray) ? (m_pPlayer->m_waveTrail->m_pointArray->count() == 0) : true;
 			bool isP2Inactive = (m_pPlayer == m_playLayer->m_player2 && !m_playLayer->m_gameState.m_isDualMode);
 
