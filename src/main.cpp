@@ -110,7 +110,7 @@ public:
 	static WaveTrailGlowy* create(PlayLayer* layer, PlayerObject* player);
 	bool init() override;
 	void update(float delta) override;
-	void onUpdateTrail();
+	void onUpdateTrail(cocos2d::CCPoint currentPosition, float distanceMoved);
 	std::vector<cocos2d::CCNode*> getPartsToRemove();
 	void onDisappearance(float delta, std::function<void()> callback = nullptr);
 	void addNewPartGlowy(cocos2d::CCPoint pos, cocos2d::ccColor3B color, float scale);
@@ -156,6 +156,9 @@ WaveTrailGlowy* WaveTrailGlowy::create(PlayLayer* layer, PlayerObject* player) {
 	if (ret && ret->init()) {
 		ret->autorelease();
 		ret->setPlayer(player);
+		if (player) {
+			ret->m_lastPositionAdded = player->getPosition();
+		}
 		ret->scheduleUpdate();
 		ret->m_playLayer = layer;
 		return ret;
@@ -245,12 +248,18 @@ void WaveTrailGlowy::update(float delta) {
 	cocos2d::CCPoint currentPosition = m_pPlayer->getPosition();
 	float distanceMoved = currentPosition.getDistance(m_lastPositionAdded);
 
-	if (distanceMoved >= 0.5f) {
-		this->onUpdateTrail();
+	if (distanceMoved > 200.0f) {
+		m_lastPositionAdded = currentPosition;
+		return;
+	}
+
+	const float spacing = 3.5f;
+	if (distanceMoved >= spacing) {
+		this->onUpdateTrail(currentPosition, distanceMoved);
 	}
 }
 
-void WaveTrailGlowy::onUpdateTrail() {
+void WaveTrailGlowy::onUpdateTrail(cocos2d::CCPoint currentPosition, float distanceMoved) {
 	if (!m_pPlayer) return;
 
 	cocos2d::ccColor3B colorWave = { 255, 255, 255 };
@@ -308,9 +317,35 @@ void WaveTrailGlowy::onUpdateTrail() {
 		: cocos2d::ccBlendFunc{ GL_ONE, GL_ONE_MINUS_SRC_ALPHA };
 	std::string glowShape = Mod::get()->getSettingValue<std::string>("glow-shape");
 
-	auto newPos = m_pPlayer->getPosition();
+	// 1. Remove parts off-screen
 	std::vector<cocos2d::CCNode*> partsToRemove = this->getPartsToRemove();
+	for (auto& partGlowyToRemove : partsToRemove) {
+		if (m_pContainerNode) {
+			m_pContainerNode->removeChild(partGlowyToRemove, true);
+		}
+		m_parts.erase(std::remove(m_parts.begin(), m_parts.end(), partGlowyToRemove), m_parts.end());
+		auto it = std::find_if(m_positions.begin(), m_positions.end(), [&](const cocos2d::CCPoint& pos) {
+			return pos.x == partGlowyToRemove->getPosition().x && pos.y == partGlowyToRemove->getPosition().y;
+		});
+		if (it != m_positions.end()) {
+			m_positions.erase(it);
+		}
+	}
 
+	// 2. Spawn equidistant points along the distance moved
+	const float spacing = 3.5f;
+	int numPoints = static_cast<int>(distanceMoved / spacing);
+	numPoints = std::clamp(numPoints, 1, 30);
+
+	cocos2d::CCPoint startPos = m_lastPositionAdded;
+	cocos2d::CCPoint dir = (currentPosition - startPos) * (1.0f / distanceMoved);
+	for (int p = 1; p <= numPoints; ++p) {
+		cocos2d::CCPoint spawnPos = startPos + dir * (spacing * p);
+		this->addNewPartGlowy(spawnPos, pulsedHeadColor, smoothed_pulse_size);
+	}
+	m_lastPositionAdded = startPos + dir * (spacing * numPoints);
+
+	// 3. Update existing parts properties
 	size_t count = m_parts.size();
 	for (size_t i = 0; i < count; ++i) {
 		auto& partGlowy = m_parts[i];
@@ -355,37 +390,23 @@ void WaveTrailGlowy::onUpdateTrail() {
 		}
 		Utils::applySpriteOpacity(partGlowy, static_cast<GLubyte>(std::clamp(partOpacity, 0.0f, 255.0f)));
 	}
-
-	for (auto& partGlowyToRemove : partsToRemove) {
-		if (m_pContainerNode) {
-			m_pContainerNode->removeChild(partGlowyToRemove, true);
-		}
-		m_parts.erase(std::remove(m_parts.begin(), m_parts.end(), partGlowyToRemove), m_parts.end());
-		auto it = std::find_if(m_positions.begin(), m_positions.end(), [&](const cocos2d::CCPoint& pos) {
-			return pos.x == partGlowyToRemove->getPosition().x && pos.y == partGlowyToRemove->getPosition().y;
-		});
-		if (it != m_positions.end()) {
-			m_positions.erase(it);
-		}
-	}
-
-	if (newPos != m_lastPositionAdded) {
-		this->addNewPartGlowy(newPos, pulsedHeadColor, smoothed_pulse_size);
-	}
 }
 
 std::vector<cocos2d::CCNode*> WaveTrailGlowy::getPartsToRemove() {
 	std::vector<cocos2d::CCNode*> ret = {};
-	if (!m_playLayer) return ret;
+	if (!m_playLayer || !m_pPlayer) return ret;
 
 	float camX = m_playLayer->m_gameState.m_cameraPosition.x;
 	if (camX == 0.0f && m_playLayer->m_objectLayer) {
 		camX = -m_playLayer->m_objectLayer->getPositionX();
 	}
+	float playerX = m_pPlayer->getPositionX();
 
 	for (auto& partGlowy : m_parts) {
 		auto pos = partGlowy->getPosition();
-		if (((pos.x - 40.f) - camX) < -80.f) {
+		bool offCameraLeft = ((pos.x - 40.f) - camX) < -80.f;
+		bool tooFarBehind = std::abs(playerX - pos.x) > 600.f;
+		if (offCameraLeft || tooFarBehind) {
 			ret.push_back(partGlowy);
 		}
 	}
@@ -496,7 +517,6 @@ void WaveTrailGlowy::addNewPartGlowy(cocos2d::CCPoint pos, cocos2d::ccColor3B co
 
 	m_pContainerNode->addChild(partGlowy);
 	m_parts.push_back(partGlowy);
-	m_lastPositionAdded = pos;
 }
 
 void WaveTrailGlowy::triggerClickPulse() {
@@ -521,6 +541,12 @@ void WaveTrailGlowy::resetTrail() {
 	m_pOpacitySpriteCurrent = m_pOpacitySpritesOriginal;
 	m_pOnHide = false;
 	m_clickPulse = 0.0f;
+	if (m_pPlayer) {
+		m_lastPositionAdded = m_pPlayer->getPosition();
+	}
+	else {
+		m_lastPositionAdded = { 0, 0 };
+	}
 }
 
 void WaveTrailGlowy::setPlayer(PlayerObject* player) {
