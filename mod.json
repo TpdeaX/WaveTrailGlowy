@@ -6,10 +6,11 @@
 		"mac": "2.2081",
 		"ios": "2.2081"
 	},
-	"version": "v1.1.0",
+	"version": "v1.2.0",
 	"id": "tpdea.wavetrailglowy",
 	"name": "Wave Trail Glowy",
 	"developer": "Tpdea",
+	"repository": "https://github.com/TpdeaX/WaveTrailGlowy",
 	"description": "Glowy epic wave trail for Geometry Dash",
 	"settings": {
 		"glowy-enabled": {
@@ -48,6 +49,59 @@
 				"arrows": true,
 				"slider": false
 			}
+		},
+		"tail-fade-out": {
+			"name": "Tail Fade-out",
+			"description": "Smoothly fades out trail segments towards the tail",
+			"type": "bool",
+			"default": true
+		},
+		"taper-trail": {
+			"name": "Trail Tapering",
+			"description": "Gradually narrows the trail width towards the tail",
+			"type": "bool",
+			"default": true
+		},
+		"taper-min-scale": {
+			"name": "Taper Min Scale",
+			"description": "Minimum scale factor at the very end of the trail",
+			"type": "float",
+			"default": 0.2,
+			"min": 0.0,
+			"max": 1.0,
+			"control": {
+				"arrows": true,
+				"slider": true
+			}
+		},
+		"neon-additive-blend": {
+			"name": "Neon Additive Blending",
+			"description": "Intense neon bloom effect using additive blend mode",
+			"type": "bool",
+			"default": true
+		},
+		"glow-shape": {
+			"name": "Glow Shape",
+			"description": "Visual shape of each glow segment",
+			"type": "string",
+			"default": "Circle",
+			"one-of": [
+				"Circle",
+				"Diamond",
+				"Flare"
+			]
+		},
+		"click-pulse": {
+			"name": "Click Pulse Flash",
+			"description": "Glow flashes and expands briefly on every wave click",
+			"type": "bool",
+			"default": true
+		},
+		"disable-practice": {
+			"name": "Disable in Practice Mode",
+			"description": "Hides the glow trail during practice mode for visual clarity",
+			"type": "bool",
+			"default": false
 		},
 		"title-seccion-p1-custom": {
 			"type": "title",

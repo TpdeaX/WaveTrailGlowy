@@ -91,6 +91,18 @@ namespace Utils {
 			}
 		}
 	}
+
+	inline void applySpriteBlend(cocos2d::CCSprite* sprite, cocos2d::ccBlendFunc blend) {
+		if (!sprite) return;
+		sprite->setBlendFunc(blend);
+		if (auto children = sprite->getChildren()) {
+			for (auto child : CCArrayExt<cocos2d::CCSprite*>(children)) {
+				if (child) {
+					child->setBlendFunc(blend);
+				}
+			}
+		}
+	}
 }
 
 class WaveTrailGlowy : public cocos2d::CCLayer {
@@ -105,6 +117,7 @@ public:
 	void resetTrail();
 	void setPlayer(PlayerObject* player);
 	void setOpacityGlowy(GLubyte opacity);
+	void triggerClickPulse();
 
 	GameObject* m_pBatchNode = nullptr;
 	PlayerObject* m_pPlayer = nullptr;
@@ -132,6 +145,7 @@ public:
 	float timer = 0.0f;
 	const float interval = 0.02f;
 	bool m_playerIndex = 0;
+	float m_clickPulse = 0.0f;
 };
 
 WaveTrailGlowy* WaveTrailGlowy::create(PlayLayer* layer, PlayerObject* player) {
@@ -161,6 +175,21 @@ bool WaveTrailGlowy::init() {
 void WaveTrailGlowy::update(float delta) {
 	this->m_playLayer = PlayLayer::get();
 	if (!m_playLayer || !m_pPlayer) return;
+
+	bool disablePractice = Mod::get()->getSettingValue<bool>("disable-practice");
+	if (disablePractice && m_playLayer->m_isPracticeMode) {
+		if (this->isVisible()) {
+			this->setVisible(false);
+		}
+		return;
+	}
+	if (!this->isVisible() && !m_pOnHide) {
+		this->setVisible(true);
+	}
+
+	if (m_clickPulse > 0.0f) {
+		m_clickPulse = std::max(0.0f, m_clickPulse - delta * 4.0f);
+	}
 
 	if (m_playLayer->m_player1 && m_pPlayer) {
 		m_playerIndex = (m_pPlayer == m_playLayer->m_player1) ? 0 : 1;
@@ -241,15 +270,61 @@ void WaveTrailGlowy::onUpdateTrail() {
 		smoothed_pulse_size = static_cast<float>(Mod::get()->getSettingValue<double>("size-glowy-wave-trail"));
 	}
 
+	bool clickPulseEnabled = Mod::get()->getSettingValue<bool>("click-pulse");
+	if (clickPulseEnabled && m_clickPulse > 0.0f) {
+		smoothed_pulse_size *= (1.0f + m_clickPulse * 0.4f);
+	}
+
+	bool tailFade = Mod::get()->getSettingValue<bool>("tail-fade-out");
+	bool taperTrail = Mod::get()->getSettingValue<bool>("taper-trail");
+	float minScale = static_cast<float>(Mod::get()->getSettingValue<double>("taper-min-scale"));
+	bool additive = Mod::get()->getSettingValue<bool>("neon-additive-blend");
+	cocos2d::ccBlendFunc blendFunc = additive 
+		? cocos2d::ccBlendFunc{ GL_SRC_ALPHA, GL_ONE } 
+		: cocos2d::ccBlendFunc{ GL_ONE, GL_ONE_MINUS_SRC_ALPHA };
+	std::string glowShape = Mod::get()->getSettingValue<std::string>("glow-shape");
+
 	auto newPos = m_pPlayer->getPosition();
 	std::vector<cocos2d::CCNode*> partsToRemove = this->getPartsToRemove();
 
-	for (auto& partGlowy : m_parts) {
+	size_t count = m_parts.size();
+	for (size_t i = 0; i < count; ++i) {
+		auto& partGlowy = m_parts[i];
 		if (updateColorAllParts) {
 			Utils::applySpriteColor(partGlowy, colorWave);
 		}
-		partGlowy->setScale(smoothed_pulse_size);
-		Utils::applySpriteOpacity(partGlowy, static_cast<GLubyte>(m_pOpacitySpriteCurrent));
+
+		Utils::applySpriteBlend(partGlowy, blendFunc);
+
+		float progress = (count > 1) ? static_cast<float>(i + 1) / static_cast<float>(count) : 1.0f;
+
+		float partScale = smoothed_pulse_size;
+		if (taperTrail && count > 1) {
+			partScale *= (minScale + (1.0f - minScale) * progress);
+		}
+
+		if (glowShape == "Diamond") {
+			partGlowy->setRotation(45.0f);
+			partGlowy->setScale(partScale);
+		}
+		else if (glowShape == "Flare") {
+			partGlowy->setRotation(30.0f);
+			partGlowy->setScaleX(partScale * 1.5f);
+			partGlowy->setScaleY(partScale * 0.7f);
+		}
+		else {
+			partGlowy->setRotation(0.0f);
+			partGlowy->setScale(partScale);
+		}
+
+		float partOpacity = m_pOpacitySpriteCurrent;
+		if (clickPulseEnabled && m_clickPulse > 0.0f && (i + 6 >= count)) {
+			partOpacity = std::min(255.0f, partOpacity * (1.0f + m_clickPulse * 0.4f));
+		}
+		if (tailFade && count > 1) {
+			partOpacity *= progress;
+		}
+		Utils::applySpriteOpacity(partGlowy, static_cast<GLubyte>(std::clamp(partOpacity, 0.0f, 255.0f)));
 	}
 
 	for (auto& partGlowyToRemove : partsToRemove) {
@@ -306,8 +381,14 @@ void WaveTrailGlowy::onDisappearance(float duration, std::function<void()> callb
 		m_pOpacitySpriteCurrent -= (duration > 0.f ? (5.f / duration) : 5.f);
 		m_pOpacitySpriteCurrent = std::max(0.f, m_pOpacitySpriteCurrent);
 
-		for (auto& partGlowy : m_parts) {
-			Utils::applySpriteOpacity(partGlowy, static_cast<GLubyte>(m_pOpacitySpriteCurrent));
+		bool tailFade = Mod::get()->getSettingValue<bool>("tail-fade-out");
+		size_t count = m_parts.size();
+		for (size_t i = 0; i < count; ++i) {
+			float factor = 1.0f;
+			if (tailFade && count > 1) {
+				factor = static_cast<float>(i + 1) / static_cast<float>(count);
+			}
+			Utils::applySpriteOpacity(m_parts[i], static_cast<GLubyte>(std::clamp(m_pOpacitySpriteCurrent * factor, 0.0f, 255.0f)));
 		}
 	}
 }
@@ -343,10 +424,15 @@ void WaveTrailGlowy::addNewPartGlowy(cocos2d::CCPoint pos, cocos2d::ccColor3B co
 	partGlowyBL->setAnchorPoint({ 1.f, 0.f });
 	partGlowyBR->setAnchorPoint({ 1.f, 0.f });
 
-	partGlowyTL->setBlendFunc({ GL_ONE, GL_ONE_MINUS_SRC_ALPHA });
-	partGlowyTR->setBlendFunc({ GL_ONE, GL_ONE_MINUS_SRC_ALPHA });
-	partGlowyBL->setBlendFunc({ GL_ONE, GL_ONE_MINUS_SRC_ALPHA });
-	partGlowyBR->setBlendFunc({ GL_ONE, GL_ONE_MINUS_SRC_ALPHA });
+	bool additive = Mod::get()->getSettingValue<bool>("neon-additive-blend");
+	cocos2d::ccBlendFunc blendFunc = additive 
+		? cocos2d::ccBlendFunc{ GL_SRC_ALPHA, GL_ONE } 
+		: cocos2d::ccBlendFunc{ GL_ONE, GL_ONE_MINUS_SRC_ALPHA };
+
+	partGlowyTL->setBlendFunc(blendFunc);
+	partGlowyTR->setBlendFunc(blendFunc);
+	partGlowyBL->setBlendFunc(blendFunc);
+	partGlowyBR->setBlendFunc(blendFunc);
 
 	partGlowy->addChild(partGlowyTL);
 	partGlowy->addChild(partGlowyTR);
@@ -354,13 +440,32 @@ void WaveTrailGlowy::addNewPartGlowy(cocos2d::CCPoint pos, cocos2d::ccColor3B co
 	partGlowy->addChild(partGlowyBR);
 
 	partGlowy->setPosition(pos);
-	partGlowy->setScale(scale);
+
+	std::string glowShape = Mod::get()->getSettingValue<std::string>("glow-shape");
+	if (glowShape == "Diamond") {
+		partGlowy->setRotation(45.0f);
+		partGlowy->setScale(scale);
+	}
+	else if (glowShape == "Flare") {
+		partGlowy->setRotation(30.0f);
+		partGlowy->setScaleX(scale * 1.5f);
+		partGlowy->setScaleY(scale * 0.7f);
+	}
+	else {
+		partGlowy->setRotation(0.0f);
+		partGlowy->setScale(scale);
+	}
+
 	Utils::applySpriteColor(partGlowy, color);
 	Utils::applySpriteOpacity(partGlowy, static_cast<GLubyte>(m_pOpacitySpriteCurrent));
 
 	m_pBatchNode->addChild(partGlowy);
 	m_parts.push_back(partGlowy);
 	m_lastPositionAdded = pos;
+}
+
+void WaveTrailGlowy::triggerClickPulse() {
+	m_clickPulse = 1.0f;
 }
 
 void WaveTrailGlowy::resetTrail() {
@@ -371,6 +476,7 @@ void WaveTrailGlowy::resetTrail() {
 	m_positions.clear();
 	m_pOpacitySpriteCurrent = m_pOpacitySpritesOriginal;
 	m_pOnHide = false;
+	m_clickPulse = 0.0f;
 }
 
 void WaveTrailGlowy::setPlayer(PlayerObject* player) {
@@ -434,6 +540,19 @@ class $modify(PlayerObject) {
 			return nullptr;
 		}
 		return typeinfo_cast<WaveTrailGlowy*>(pl->m_objectLayer->getChildByID(player1 ? "WaveTrailGlowy_m_player1" : "WaveTrailGlowy_m_player2"));
+	}
+
+	void pushButton(PlayerButton p0) {
+		PlayerObject::pushButton(p0);
+		if (p0 == PlayerButton::Jump && this->m_isDart) {
+			auto pl = PlayLayer::get();
+			if (pl) {
+				auto glowWave = getWaveTrailGlowy(pl->m_player1 == this);
+				if (glowWave) {
+					glowWave->triggerClickPulse();
+				}
+			}
+		}
 	}
 
 	void resetStreak() {

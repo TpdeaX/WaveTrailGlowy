@@ -9,7 +9,7 @@ else()
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64")
 endif()
 
-project(WaveTrailGlowy VERSION 1.1.0)
+project(WaveTrailGlowy VERSION 1.2.0)
 
 add_library(${PROJECT_NAME} SHARED
     src/main.cpp

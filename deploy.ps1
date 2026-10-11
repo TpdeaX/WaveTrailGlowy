@@ -31,6 +31,9 @@ $mod = Get-Content -Raw (Join-Path $RepoDir 'mod.json') | ConvertFrom-Json
 $modId     = $mod.id
 $geodeName = "$modId.geode"
 $repoUrl   = $mod.repository
+if (-not $repoUrl) {
+    $repoUrl = ((git remote get-url origin).Trim() -replace '\.git$', '')
+}
 $repoSlug  = ($repoUrl -replace '^https://github.com/', '').TrimEnd('/')
 $apiBase   = "https://api.github.com/repos/$repoSlug"
 
