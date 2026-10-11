@@ -43,7 +43,7 @@
 		"size-glowy-wave-trail": {
 			"name": "Size",
 			"type": "float",
-			"default": 1.0,
+			"default": 0.9,
 			"min": 0.0,
 			"control": {
 				"arrows": true,
@@ -54,13 +54,13 @@
 			"name": "Tail Fade-out",
 			"description": "Smoothly fades out trail segments towards the tail",
 			"type": "bool",
-			"default": true
+			"default": false
 		},
 		"taper-trail": {
 			"name": "Trail Tapering",
 			"description": "Gradually narrows the trail width towards the tail",
 			"type": "bool",
-			"default": true
+			"default": false
 		},
 		"taper-min-scale": {
 			"name": "Taper Min Scale",
@@ -78,7 +78,7 @@
 			"name": "Neon Additive Blending",
 			"description": "Intense neon bloom effect using additive blend mode",
 			"type": "bool",
-			"default": true
+			"default": false
 		},
 		"glow-shape": {
 			"name": "Glow Shape",
@@ -95,7 +95,7 @@
 			"name": "Click Pulse Flash",
 			"description": "Glow flashes and expands briefly on every wave click",
 			"type": "bool",
-			"default": true
+			"default": false
 		},
 		"click-pulse-color": {
 			"name": "Click Pulse Color",

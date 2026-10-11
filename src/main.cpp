@@ -121,7 +121,7 @@ public:
 	void startDisappearance();
 	void stopProducingAndDisappear();
 
-	GameObject* m_pBatchNode = nullptr;
+	cocos2d::CCNode* m_pContainerNode = nullptr;
 	PlayerObject* m_pPlayer = nullptr;
 	PlayLayer* m_playLayer = nullptr;
 	cocos2d::CCPoint m_lastPositionAdded = {};
@@ -168,9 +168,9 @@ bool WaveTrailGlowy::init() {
 	if (!cocos2d::CCLayer::init()) {
 		return false;
 	}
-	m_pBatchNode = GameObject::createWithFrame("emptyFrame.png");
-	if (m_pBatchNode) {
-		addChild(m_pBatchNode);
+	m_pContainerNode = cocos2d::CCNode::create();
+	if (m_pContainerNode) {
+		addChild(m_pContainerNode);
 	}
 	return true;
 }
@@ -200,32 +200,39 @@ void WaveTrailGlowy::update(float delta) {
 
 	m_hideOnDead = !Mod::get()->getSettingValue<bool>("glowy-on-death");
 
-	bool currDartState = m_pPlayer->m_isDart;
-	bool isDead = m_pPlayer->m_isDead || (m_playLayer->m_player1 && m_playLayer->m_player1->m_isDead);
-	bool trailEmpty = (m_pPlayer->m_waveTrail && m_pPlayer->m_waveTrail->m_pointArray) ? (m_pPlayer->m_waveTrail->m_pointArray->count() == 0) : true;
-	bool isP2Inactive = (m_pPlayer == m_playLayer->m_player2 && !m_playLayer->m_gameState.m_isDualMode);
-
-	if ((!prevDartState && currDartState) || m_pPlayer->m_isHidden) {
-		resetTrail();
-		m_isLevelEnding = false;
+	// 1. Level end animation: stop producing completely and fade out remaining trail
+	if (m_isLevelEnding || m_playLayer->m_hasCompletedLevel) {
+		if (!m_parts.empty()) {
+			this->onDisappearance(delta);
+		}
+		return;
 	}
 
-	// Stop producing and disappear when level finishes, player dies (if hide on death is set), or wave is inactive
-	if (m_isLevelEnding ||
-		m_playLayer->m_hasCompletedLevel ||
-		(prevDartState && !currDartState) ||
-		isP2Inactive ||
-		(isDead && m_hideOnDead) ||
-		trailEmpty ||
-		m_pOnHide) {
+	// 2. Dead: stop producing completely and fade out remaining trail
+	bool isDead = m_pPlayer->m_isDead || (m_playLayer->m_player1 && m_playLayer->m_player1->m_isDead);
+	if (isDead && m_hideOnDead) {
+		if (!m_parts.empty()) {
+			this->onDisappearance(delta);
+		}
+		return;
+	}
 
-		this->onDisappearance(delta, [this] {
-			m_pOnHide = false;
-		});
+	// 3. Wave state check:
+	bool currDartState = m_pPlayer->m_isDart;
+	bool isP2Inactive = (m_pPlayer == m_playLayer->m_player2 && !m_playLayer->m_gameState.m_isDualMode);
+	bool trailEmpty = (m_pPlayer->m_waveTrail && m_pPlayer->m_waveTrail->m_pointArray) ? (m_pPlayer->m_waveTrail->m_pointArray->count() == 0) : true;
+
+	if (!currDartState || isP2Inactive || m_pPlayer->m_isHidden || trailEmpty) {
+		if (!m_parts.empty()) {
+			this->onDisappearance(delta);
+		}
 		prevDartState = currDartState;
 		return;
 	}
 
+	if (!prevDartState && currDartState) {
+		resetTrail();
+	}
 	prevDartState = currDartState;
 
 	fadeInitialColor.color = Mod::get()->getSettingValue<cocos2d::ccColor3B>(m_playerIndex ? "fade-color-glowy-p2-initial" : "fade-color-glowy-p1-initial");
@@ -350,8 +357,8 @@ void WaveTrailGlowy::onUpdateTrail() {
 	}
 
 	for (auto& partGlowyToRemove : partsToRemove) {
-		if (m_pBatchNode) {
-			m_pBatchNode->removeChild(partGlowyToRemove, true);
+		if (m_pContainerNode) {
+			m_pContainerNode->removeChild(partGlowyToRemove, true);
 		}
 		m_parts.erase(std::remove(m_parts.begin(), m_parts.end(), partGlowyToRemove), m_parts.end());
 		auto it = std::find_if(m_positions.begin(), m_positions.end(), [&](const cocos2d::CCPoint& pos) {
@@ -422,7 +429,7 @@ void WaveTrailGlowy::onDisappearance(float delta, std::function<void()> callback
 }
 
 void WaveTrailGlowy::addNewPartGlowy(cocos2d::CCPoint pos, cocos2d::ccColor3B color, float scale) {
-	if (!m_pBatchNode) return;
+	if (!m_pContainerNode) return;
 
 	auto partGlowy = cocos2d::CCSprite::createWithSpriteFrameName("emptyFrame.png");
 	if (!partGlowy) {
@@ -487,7 +494,7 @@ void WaveTrailGlowy::addNewPartGlowy(cocos2d::CCPoint pos, cocos2d::ccColor3B co
 	Utils::applySpriteColor(partGlowy, color);
 	Utils::applySpriteOpacity(partGlowy, static_cast<GLubyte>(m_pOpacitySpriteCurrent));
 
-	m_pBatchNode->addChild(partGlowy);
+	m_pContainerNode->addChild(partGlowy);
 	m_parts.push_back(partGlowy);
 	m_lastPositionAdded = pos;
 }
@@ -506,14 +513,13 @@ void WaveTrailGlowy::stopProducingAndDisappear() {
 }
 
 void WaveTrailGlowy::resetTrail() {
-	if (m_pBatchNode) {
-		m_pBatchNode->removeAllChildrenWithCleanup(true);
+	if (m_pContainerNode) {
+		m_pContainerNode->removeAllChildrenWithCleanup(true);
 	}
 	m_parts.clear();
 	m_positions.clear();
 	m_pOpacitySpriteCurrent = m_pOpacitySpritesOriginal;
 	m_pOnHide = false;
-	m_isLevelEnding = false;
 	m_clickPulse = 0.0f;
 }
 
