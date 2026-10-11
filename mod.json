@@ -97,6 +97,12 @@
 			"type": "bool",
 			"default": true
 		},
+		"click-pulse-color": {
+			"name": "Click Pulse Color",
+			"description": "Flash color when clicking in wave mode",
+			"type": "color",
+			"default": [ 255, 255, 255 ]
+		},
 		"disable-practice": {
 			"name": "Disable in Practice Mode",
 			"description": "Hides the glow trail during practice mode for visual clarity",

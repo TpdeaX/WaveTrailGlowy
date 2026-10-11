@@ -112,12 +112,14 @@ public:
 	void update(float delta) override;
 	void onUpdateTrail();
 	std::vector<cocos2d::CCNode*> getPartsToRemove();
-	void onDisappearance(float duration, std::function<void()> callback);
+	void onDisappearance(float delta, std::function<void()> callback = nullptr);
 	void addNewPartGlowy(cocos2d::CCPoint pos, cocos2d::ccColor3B color, float scale);
 	void resetTrail();
 	void setPlayer(PlayerObject* player);
 	void setOpacityGlowy(GLubyte opacity);
 	void triggerClickPulse();
+	void startDisappearance();
+	void stopProducingAndDisappear();
 
 	GameObject* m_pBatchNode = nullptr;
 	PlayerObject* m_pPlayer = nullptr;
@@ -140,6 +142,7 @@ public:
 
 	bool m_pOnHide = false;
 	bool m_hideOnDead = true;
+	bool m_isLevelEnding = false;
 	bool prevDartState = false;
 
 	float timer = 0.0f;
@@ -197,6 +200,34 @@ void WaveTrailGlowy::update(float delta) {
 
 	m_hideOnDead = !Mod::get()->getSettingValue<bool>("glowy-on-death");
 
+	bool currDartState = m_pPlayer->m_isDart;
+	bool isDead = m_pPlayer->m_isDead || (m_playLayer->m_player1 && m_playLayer->m_player1->m_isDead);
+	bool trailEmpty = (m_pPlayer->m_waveTrail && m_pPlayer->m_waveTrail->m_pointArray) ? (m_pPlayer->m_waveTrail->m_pointArray->count() == 0) : true;
+	bool isP2Inactive = (m_pPlayer == m_playLayer->m_player2 && !m_playLayer->m_gameState.m_isDualMode);
+
+	if ((!prevDartState && currDartState) || m_pPlayer->m_isHidden) {
+		resetTrail();
+		m_isLevelEnding = false;
+	}
+
+	// Stop producing and disappear when level finishes, player dies (if hide on death is set), or wave is inactive
+	if (m_isLevelEnding ||
+		m_playLayer->m_hasCompletedLevel ||
+		(prevDartState && !currDartState) ||
+		isP2Inactive ||
+		(isDead && m_hideOnDead) ||
+		trailEmpty ||
+		m_pOnHide) {
+
+		this->onDisappearance(delta, [this] {
+			m_pOnHide = false;
+		});
+		prevDartState = currDartState;
+		return;
+	}
+
+	prevDartState = currDartState;
+
 	fadeInitialColor.color = Mod::get()->getSettingValue<cocos2d::ccColor3B>(m_playerIndex ? "fade-color-glowy-p2-initial" : "fade-color-glowy-p1-initial");
 	fadeFinalColor.color = Mod::get()->getSettingValue<cocos2d::ccColor3B>(m_playerIndex ? "fade-color-glowy-p2-final" : "fade-color-glowy-p1-final");
 
@@ -207,31 +238,8 @@ void WaveTrailGlowy::update(float delta) {
 	cocos2d::CCPoint currentPosition = m_pPlayer->getPosition();
 	float distanceMoved = currentPosition.getDistance(m_lastPositionAdded);
 
-	int glowsToAdd = std::max(static_cast<int>(distanceMoved / 0.5f) - static_cast<int>(m_parts.size()), 0);
-
-	for (int i = 0; i < glowsToAdd; ++i) {
-		bool currDartState = m_pPlayer->m_isDart;
-		if ((!prevDartState && currDartState) || m_pPlayer->m_isHidden || !m_pPlayer) {
-			resetTrail();
-		}
-		else {
-			bool isDead = m_pPlayer->m_isDead || (m_playLayer->m_player1 && m_playLayer->m_player1->m_isDead);
-			bool trailEmpty = (m_pPlayer->m_waveTrail && m_pPlayer->m_waveTrail->m_pointArray) ? (m_pPlayer->m_waveTrail->m_pointArray->count() == 0) : true;
-			bool isP2Inactive = (m_pPlayer == m_playLayer->m_player2 && !m_playLayer->m_gameState.m_isDualMode);
-
-			if ((prevDartState && !currDartState) ||
-				m_playLayer->m_hasCompletedLevel ||
-				isP2Inactive ||
-				(isDead && m_hideOnDead) ||
-				m_pOnHide ||
-				trailEmpty) {
-				this->onDisappearance(0.5f, [this] { m_pOnHide = false; });
-			}
-			else {
-				this->onUpdateTrail();
-			}
-		}
-		prevDartState = currDartState;
+	if (distanceMoved >= 0.5f) {
+		this->onUpdateTrail();
 	}
 }
 
@@ -271,8 +279,17 @@ void WaveTrailGlowy::onUpdateTrail() {
 	}
 
 	bool clickPulseEnabled = Mod::get()->getSettingValue<bool>("click-pulse");
+	cocos2d::ccColor3B pulseColor = Mod::get()->getSettingValue<cocos2d::ccColor3B>("click-pulse-color");
+	cocos2d::ccColor3B pulsedHeadColor = colorWave;
 	if (clickPulseEnabled && m_clickPulse > 0.0f) {
 		smoothed_pulse_size *= (1.0f + m_clickPulse * 0.4f);
+		float pulseFactor = std::clamp(m_clickPulse, 0.0f, 1.0f);
+		float r = static_cast<float>(colorWave.r) + (static_cast<float>(pulseColor.r) - static_cast<float>(colorWave.r)) * pulseFactor;
+		float g = static_cast<float>(colorWave.g) + (static_cast<float>(pulseColor.g) - static_cast<float>(colorWave.g)) * pulseFactor;
+		float b = static_cast<float>(colorWave.b) + (static_cast<float>(pulseColor.b) - static_cast<float>(colorWave.b)) * pulseFactor;
+		pulsedHeadColor.r = static_cast<GLubyte>(std::clamp(r, 0.0f, 255.0f));
+		pulsedHeadColor.g = static_cast<GLubyte>(std::clamp(g, 0.0f, 255.0f));
+		pulsedHeadColor.b = static_cast<GLubyte>(std::clamp(b, 0.0f, 255.0f));
 	}
 
 	bool tailFade = Mod::get()->getSettingValue<bool>("tail-fade-out");
@@ -290,8 +307,13 @@ void WaveTrailGlowy::onUpdateTrail() {
 	size_t count = m_parts.size();
 	for (size_t i = 0; i < count; ++i) {
 		auto& partGlowy = m_parts[i];
-		if (updateColorAllParts) {
-			Utils::applySpriteColor(partGlowy, colorWave);
+		cocos2d::ccColor3B partColor = colorWave;
+		if (clickPulseEnabled && m_clickPulse > 0.0f && (i + 6 >= count)) {
+			partColor = pulsedHeadColor;
+		}
+
+		if (updateColorAllParts || (clickPulseEnabled && m_clickPulse > 0.0f && i + 6 >= count)) {
+			Utils::applySpriteColor(partGlowy, partColor);
 		}
 
 		Utils::applySpriteBlend(partGlowy, blendFunc);
@@ -341,7 +363,7 @@ void WaveTrailGlowy::onUpdateTrail() {
 	}
 
 	if (newPos != m_lastPositionAdded) {
-		this->addNewPartGlowy(newPos, colorWave, smoothed_pulse_size);
+		this->addNewPartGlowy(newPos, pulsedHeadColor, smoothed_pulse_size);
 	}
 }
 
@@ -364,7 +386,7 @@ std::vector<cocos2d::CCNode*> WaveTrailGlowy::getPartsToRemove() {
 	return ret;
 }
 
-void WaveTrailGlowy::onDisappearance(float duration, std::function<void()> callback) {
+void WaveTrailGlowy::onDisappearance(float delta, std::function<void()> callback) {
 	m_pOnHide = true;
 
 	auto onComplete = [this, callback]() {
@@ -374,12 +396,18 @@ void WaveTrailGlowy::onDisappearance(float duration, std::function<void()> callb
 		}
 	};
 
-	if (m_pOpacitySpriteCurrent <= 0) {
+	if (m_pOpacitySpriteCurrent <= 0.0f || m_parts.empty()) {
 		onComplete();
 	}
 	else {
-		m_pOpacitySpriteCurrent -= (duration > 0.f ? (5.f / duration) : 5.f);
-		m_pOpacitySpriteCurrent = std::max(0.f, m_pOpacitySpriteCurrent);
+		float fadeDuration = 0.25f;
+		float fadeStep = (m_pOpacitySpritesOriginal / fadeDuration) * delta;
+		m_pOpacitySpriteCurrent = std::max(0.0f, m_pOpacitySpriteCurrent - fadeStep);
+
+		if (m_pOpacitySpriteCurrent <= 0.0f) {
+			onComplete();
+			return;
+		}
 
 		bool tailFade = Mod::get()->getSettingValue<bool>("tail-fade-out");
 		size_t count = m_parts.size();
@@ -468,6 +496,15 @@ void WaveTrailGlowy::triggerClickPulse() {
 	m_clickPulse = 1.0f;
 }
 
+void WaveTrailGlowy::startDisappearance() {
+	m_pOnHide = true;
+}
+
+void WaveTrailGlowy::stopProducingAndDisappear() {
+	m_isLevelEnding = true;
+	m_pOnHide = true;
+}
+
 void WaveTrailGlowy::resetTrail() {
 	if (m_pBatchNode) {
 		m_pBatchNode->removeAllChildrenWithCleanup(true);
@@ -476,6 +513,7 @@ void WaveTrailGlowy::resetTrail() {
 	m_positions.clear();
 	m_pOpacitySpriteCurrent = m_pOpacitySpritesOriginal;
 	m_pOnHide = false;
+	m_isLevelEnding = false;
 	m_clickPulse = 0.0f;
 }
 
@@ -520,14 +558,43 @@ class $modify(PlayLayer) {
 		return true;
 	}
 
+	void playEndAnimationToPos(cocos2d::CCPoint position) {
+		PlayLayer::playEndAnimationToPos(position);
+		if (auto wtp1 = getWaveTrailGlowy(true)) wtp1->stopProducingAndDisappear();
+		if (auto wtp2 = getWaveTrailGlowy(false)) wtp2->stopProducingAndDisappear();
+	}
+
+	void playPlatformerEndAnimationToPos(cocos2d::CCPoint position, bool instant) {
+		PlayLayer::playPlatformerEndAnimationToPos(position, instant);
+		if (auto wtp1 = getWaveTrailGlowy(true)) wtp1->stopProducingAndDisappear();
+		if (auto wtp2 = getWaveTrailGlowy(false)) wtp2->stopProducingAndDisappear();
+	}
+
+	void levelComplete() {
+		PlayLayer::levelComplete();
+		if (auto wtp1 = getWaveTrailGlowy(true)) wtp1->stopProducingAndDisappear();
+		if (auto wtp2 = getWaveTrailGlowy(false)) wtp2->stopProducingAndDisappear();
+	}
+
+	void destroyPlayer(PlayerObject* player, GameObject* object) {
+		PlayLayer::destroyPlayer(player, object);
+		bool glowOnDeath = Mod::get()->getSettingValue<bool>("glowy-on-death");
+		if (!glowOnDeath) {
+			if (auto wtp1 = getWaveTrailGlowy(true)) wtp1->startDisappearance();
+			if (auto wtp2 = getWaveTrailGlowy(false)) wtp2->startDisappearance();
+		}
+	}
+
 	void resetLevel() {
 		PlayLayer::resetLevel();
 		auto wtp1 = getWaveTrailGlowy(true);
 		auto wtp2 = getWaveTrailGlowy(false);
 		if (wtp1) {
+			wtp1->m_isLevelEnding = false;
 			wtp1->resetTrail();
 		}
 		if (wtp2) {
+			wtp2->m_isLevelEnding = false;
 			wtp2->resetTrail();
 		}
 	}
@@ -550,6 +617,20 @@ class $modify(PlayerObject) {
 				auto glowWave = getWaveTrailGlowy(pl->m_player1 == this);
 				if (glowWave) {
 					glowWave->triggerClickPulse();
+				}
+			}
+		}
+	}
+
+	void playerDestroyed(bool p0) {
+		PlayerObject::playerDestroyed(p0);
+		auto pl = PlayLayer::get();
+		if (pl) {
+			bool glowOnDeath = Mod::get()->getSettingValue<bool>("glowy-on-death");
+			if (!glowOnDeath) {
+				auto glowWave = getWaveTrailGlowy(pl->m_player1 == this);
+				if (glowWave) {
+					glowWave->startDisappearance();
 				}
 			}
 		}
