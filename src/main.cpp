@@ -342,16 +342,16 @@ void WaveTrailGlowy::onUpdateTrail(cocos2d::CCPoint currentPosition, float dista
 	float dx = (currentPosition.x - startPos.x) / distanceMoved;
 	float dy = (currentPosition.y - startPos.y) / distanceMoved;
 	for (int p = 1; p <= numPoints; ++p) {
-		cocos2d::CCPoint spawnPos = {
+		cocos2d::CCPoint spawnPos(
 			startPos.x + dx * (spacing * p),
 			startPos.y + dy * (spacing * p)
-		};
+		);
 		this->addNewPartGlowy(spawnPos, pulsedHeadColor, smoothed_pulse_size);
 	}
-	m_lastPositionAdded = {
+	m_lastPositionAdded = cocos2d::CCPoint(
 		startPos.x + dx * (spacing * numPoints),
 		startPos.y + dy * (spacing * numPoints)
-	};
+	);
 
 	// 3. Update existing parts properties
 	size_t count = m_parts.size();
@@ -553,7 +553,7 @@ void WaveTrailGlowy::resetTrail() {
 		m_lastPositionAdded = m_pPlayer->getPosition();
 	}
 	else {
-		m_lastPositionAdded = { 0, 0 };
+		m_lastPositionAdded = cocos2d::CCPoint(0.0f, 0.0f);
 	}
 }
 
