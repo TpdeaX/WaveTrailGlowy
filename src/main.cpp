@@ -2,6 +2,7 @@
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/PlayerObject.hpp>
 #include <Geode/binding/HardStreak.hpp>
+#include <cmath>
 
 using namespace geode::prelude;
 
@@ -338,12 +339,19 @@ void WaveTrailGlowy::onUpdateTrail(cocos2d::CCPoint currentPosition, float dista
 	numPoints = std::clamp(numPoints, 1, 30);
 
 	cocos2d::CCPoint startPos = m_lastPositionAdded;
-	cocos2d::CCPoint dir = (currentPosition - startPos) * (1.0f / distanceMoved);
+	float dx = (currentPosition.x - startPos.x) / distanceMoved;
+	float dy = (currentPosition.y - startPos.y) / distanceMoved;
 	for (int p = 1; p <= numPoints; ++p) {
-		cocos2d::CCPoint spawnPos = startPos + dir * (spacing * p);
+		cocos2d::CCPoint spawnPos = {
+			startPos.x + dx * (spacing * p),
+			startPos.y + dy * (spacing * p)
+		};
 		this->addNewPartGlowy(spawnPos, pulsedHeadColor, smoothed_pulse_size);
 	}
-	m_lastPositionAdded = startPos + dir * (spacing * numPoints);
+	m_lastPositionAdded = {
+		startPos.x + dx * (spacing * numPoints),
+		startPos.y + dy * (spacing * numPoints)
+	};
 
 	// 3. Update existing parts properties
 	size_t count = m_parts.size();
